@@ -1,0 +1,198 @@
+<%- include('layouts/header.ejs') %>
+
+<h2 class="mb-4">Hiii, <%= user.name %></h2>
+
+<div class="row">
+    <div class="col-md-3">
+        <ul class="list-group">
+            <% 
+                if(users.length > 0) {
+                    for (i = 0; i < users.length; i++){
+                        %>
+                            <li class="list-group-item list-group-item-dark cursor-pointer user-list" data-id="<%= users[i]['_id'] %>">
+                                <img src="<%= 'http://localhost:3000/' + users[i]['image'] %>" alt="" width="60px" height="100px">
+                                <%= users[i]['name']  %>
+
+                                <%
+                                    if(users[i]['is_online'] == 1) {
+                                        %>
+                                            <sup class="online-status" id="<% users[i]['_id'] %>-status">Online</sup>
+                                        <%
+                                    }
+                                    else {
+                                        %>
+                                            <sup class="offline-status" id="<% users[i]['_id'] %>-status">Offline</sup>
+                                        <%
+                                    }
+                                %>
+
+                            </li>
+                        <%
+                    }
+                }
+            %>
+        </ul>
+    </div>
+    <div class="col-md-9">
+        <h3 class="start-head"> Click to start the Chat </h3>
+        <div class="chat-section">
+            <div id="chat-container">
+                
+            </div>
+            <form action="" id="chat-form">
+                <input class="border" type="text" name="message" placeholder="Enter the message" id="message" required />
+                <input type="submit" value="Send Message" class="btn btn-primary" />
+            </form>
+        </div>
+    </div>
+</div>
+
+
+<!-- Modal -->
+<div class="modal fade" id="deleteChatModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h1 class="modal-title" id="exampleModalLongTitle">Delete Chat</h1>
+        <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+
+      <form id="delete-chat-form">
+        <div class="modal-body">
+            <input type="text" name="id" id="delete-message-id" />
+            <p>Are you sure that you want to delete the message?</p>
+            <p><b id="delete-message"></b></p>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            <button type="button" class="btn btn-primary">Save Changes</button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+</div>
+
+
+<script>
+
+    var sender_id = '<%= user._id %>';
+    var receiver_id;
+    var socket = io('/user-namespace', {
+        auth: {
+            token: '<%= user._id %>'
+        }
+    });
+
+    $(document).ready(function(){
+        $('.user-list').click(function(){
+
+            var userId = $(this).attr('data-id');
+            receiver_id = userId;
+
+            $('.start-head').hide();
+            $('.chat-section').show();
+
+            socket.emit('existsChat', { sender_id: sender_id, receiver_id: receiver_id });
+
+        });
+    });
+
+    // update online status of the user
+    socket.on('getOnlineUser', function(data){
+        $('#' + data.user_id + "-status").text('Online');
+        $('#' + data.user_id + "-status").removeClass('offline-status');
+        $('#' + data.user_id + "-status").addClass('online-status');
+    });
+
+    // update offline status of the user
+    socket.on('getOfflineUser', function(data){
+        $('#' + data.user_id + "-status").text('Offline');
+        $('#' + data.user_id + "-status").addClass('offline-status');
+        $('#' + data.user_id + "-status").removeClass('online-status');
+    });
+
+    // saving the chat of the user
+    $('#chat-form').submit(function(event){
+        event.preventDefault();
+
+        var message = $('#message').val();
+        
+        $.ajax({
+            url: '/save-chat',
+            type: 'POST',
+            data: {
+                sender_id: sender_id,
+                receiver_id: receiver_id,
+                message: message
+            },
+            success: function(response){
+                if(response.success) {
+                    console.log(response.data.message);
+                    $('#message').val('');
+                    let chat = response.data.message;
+                    let html = `
+                        <div class="current-user-chat">
+                            <h5>` + chat + `</h5>
+                        </div>
+                    `;
+                    $('#chat-container').append(html);
+                    socket.emit('newChat', response.data);
+
+                    scrollChat();
+                }
+                else {
+                    alert(data.msg);
+                }
+            }
+        })
+    });
+
+    socket.on('loadNewChat', function(){
+        if(sender_id == data.receiver_id && receiver_id == data.sender_id){
+            let html = `
+                <div class="distance-user-chat">
+                    <h5>` + data.message + `</h5>
+                </div>
+            `;
+            $('#chat-container').append(html); 
+        }
+        scrollChat();
+    });
+
+    // load old chats
+    socket.on('loadChats', function(data){
+        $('#chat-container').html('');
+        var chats = data.chats;
+        let html = '';
+        for(let x=0; x<chats.length; x++){
+            let addClass = '';
+            if(chats[x]['sender_id'] == sender_id){
+                addClass = 'current-user-chat';
+            }
+            else {
+                addClass = 'distance-user-chat';
+            }
+            let html = `
+                <div class='`+ addClass +`'>
+                    <h5>` + chats[x]['message'] + `
+                        <i class="fa fa-trash" aria-hidden="true"></i>
+                    </h5>
+                </div>
+            `;
+        }
+        $('#chat-container').append(html);
+        scrollChat();
+    });
+
+    function scrollChat(){
+        $('#char-container').animate({
+            scrollTop: $('#chat-container').offset().top() + $('#chat-container')[0].scrollHeight
+        }, 0);
+    }
+
+</script>
+
+<%- include('layouts/footer.ejs') %>
